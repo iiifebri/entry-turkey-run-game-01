@@ -657,14 +657,14 @@ export function createRenderer(canvas) {
       ctx.fillRect(0, 560, FIELD.W, 160);
     }
     if (won) {
-      const gus = { x: 560, y: 470, faceX: 1, faceY: 0, hopT: 0, hopCd: 0, sprinting: false, hidden: false, hideSpot: null, hearts: 3, invulnT: 0, bob: w.time * 3, moving: false };
+      const gus = { x: 300, y: 520, faceX: 1, faceY: 0, hopT: 0, hopCd: 0, sprinting: false, hidden: false, hideSpot: null, hearts: 3, invulnT: 0, bob: w.time * 3, moving: false };
       drawTurkeyFigure(gus, w.time);
       ctx.strokeStyle = PALETTE.panel;
       ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(620, 440); ctx.lineTo(620, 360); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(360, 490); ctx.lineTo(360, 410); ctx.stroke();
       ctx.fillStyle = PALETTE.gold;
-      ctx.beginPath(); ctx.moveTo(620, 360); ctx.lineTo(676, 374); ctx.lineTo(620, 388); ctx.closePath(); ctx.fill();
-      text('FREE!', 648, 382, 22, PALETTE.panel, 'center');
+      ctx.beginPath(); ctx.moveTo(360, 410); ctx.lineTo(416, 424); ctx.lineTo(360, 438); ctx.closePath(); ctx.fill();
+      text('FREE!', 388, 432, 22, PALETTE.panel, 'center');
       outlineText('ESCAPED!', FIELD.W / 2, 150, 72, PALETTE.cream, '#6B3F22', 'center');
       text('Gus made it to the woods — no Thanksgiving dinner this year!', FIELD.W / 2, 196, 24, PALETTE.cream, 'center');
       panel(440, 230, 400, 220, 0.92);
