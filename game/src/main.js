@@ -1,6 +1,6 @@
 // main.js — boot, fixed-step loop and screen state machine for Gobble or Roast!
 // Screens: title -> playing -> paused -> escaped | caught. Shot mode
-// (?shot=start|play|kitchen|end&seed=1) draws a deterministic staged frame
+// (?shot=start|play|search|kitchen|end&seed=1) draws a deterministic staged frame
 // twice with the real renderer and sets window.__shotReady.
 
 import { createRenderer } from './render.js';
@@ -16,7 +16,7 @@ const params = new URLSearchParams(window.location.search);
 const shotName = params.get('shot');
 const seedParam = parseInt(params.get('seed') || '1', 10);
 const seed = Number.isFinite(seedParam) ? seedParam : 1;
-const shotMode = shotName === 'start' || shotName === 'play' || shotName === 'kitchen' || shotName === 'end';
+const shotMode = shotName === 'start' || shotName === 'play' || shotName === 'search' || shotName === 'kitchen' || shotName === 'end';
 
 const input = createInput(canvas);
 const renderer = createRenderer(canvas);

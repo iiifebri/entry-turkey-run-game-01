@@ -1,5 +1,5 @@
 // shots.js — deterministic staged scenes for screenshots.
-// ?shot=start|play|kitchen|end&seed=1 renders a fixed frame with the REAL
+// ?shot=start|play|search|kitchen|end&seed=1 renders a fixed frame with the REAL
 // renderer from real game state (no compositing, no audio, no localStorage,
 // no Math.random, no clock). The autopilot plays the real game; where the
 // design allows a hard-coded frame (kitchen), the positions are staged but
@@ -7,7 +7,6 @@
 
 import { createWorld, setStage, stepWorld, idleWorld } from './world.js';
 import { STEP, TUNING } from './config.js';
-import { spawnThrownKnife } from './hazards.js';
 
 function autopilotInput(world) {
   return {
@@ -112,8 +111,37 @@ export function stageShot(name, seed) {
     world.turkey.y = 380;
     world.turkey.hopT = 0;
     world.turkey.invulnT = 0;
+    world.turkey.scale = 1.3;
+    world.turkey.sprinting = true;
+    world.turkey.moving = true;
+    world.turkey.faceX = 1;
+    world.glowTurkey = true;
+    // Dust trail trailing left of Gus's feet (none on the beam at x 560-580).
+    world.particles = [
+      { kind: 'dust', x: 620, y: 418, vx: -20, vy: -10, t: 0.2, life: 0.9, rot: 0, vr: 0 },
+      { kind: 'dust', x: 595, y: 424, vx: -20, vy: -10, t: 0.2, life: 0.9, rot: 0, vr: 0 },
+      { kind: 'dust', x: 545, y: 420, vx: -20, vy: -10, t: 0.2, life: 0.9, rot: 0, vr: 0 },
+      { kind: 'dust', x: 520, y: 414, vx: -20, vy: -10, t: 0.2, life: 0.9, rot: 0, vr: 0 },
+    ];
     world.score = Math.max(world.score, 320);
     world.parts.corn = Math.max(world.parts.corn, 320);
+    world.cornCount = 3;
+    world.hint = 'RUN! Sprint with SHIFT!';
+    // Golden corn ahead of Gus in his lane, clear of his right edge.
+    for (const c of world.corn) {
+      if (c.golden) { c.x = 770; c.y = 380; c.taken = false; }
+    }
+    // Visible kernel trail in Gus's path, filling the lower-central band.
+    const trail = [[600, 445], [760, 440], [850, 400]];
+    let ti = 0;
+    for (const c of world.corn) {
+      if (ti >= trail.length) break;
+      if (c.golden) continue;
+      c.x = trail[ti][0];
+      c.y = trail[ti][1];
+      c.taken = false;
+      ti += 1;
+    }
     const f = world.farmer;
     f.state = 'CHASE';
     f.suspicion = 1;
@@ -123,7 +151,84 @@ export function stageShot(name, seed) {
     f.y = 380;
     f.facing = 0;
     f.loseT = 0;
-    spawnThrownKnife(world.hazards, f.x + 30, f.y - 10, world.turkey.x, world.turkey.y);
+    f.scale = 1.15;
+    f.vision = 260;
+    // Thrown knife mid-flight: big, spinning, with a motion streak.
+    // Pushed directly (not spawnThrownKnife) so it starts mid-air.
+    world.hazards.knives.length = 0;
+    const kdx = world.turkey.x - 585;
+    const kdy = world.turkey.y - 375;
+    const kd = Math.hypot(kdx, kdy) || 1;
+    world.hazards.knives.push({
+      kind: 'thrown', x: 585, y: 375,
+      vx: (kdx / kd) * TUNING.knifeThrowSpeed, vy: (kdy / kd) * TUNING.knifeThrowSpeed,
+      spin: -0.25, minD: 9999, dead: false, big: true,
+    });
+    world.floaters = [
+      { x: 677, y: 300, text: 'CLOSE ONE! +25', color: '#F2C94C', t: 0, life: 1.1 },
+    ];
+    world.events.length = 0;
+    return { world, screen: 'playing', best: { score: 0, dist: 0 }, newBest: false };
+  }
+
+  if (name === 'search') {
+    // Stage 3 kitchen, SEARCH: Bram checks the wrong spot (the pantry)
+    // while Gus peeks from the potato sack behind him. Staged positions
+    // are allowed here by the design; the frame is still rendered by the
+    // real renderer from real game state.
+    const world = createWorld(seed);
+    setStage(world, 2);
+    world.time = 0;
+    world.stageClearT = 0;
+    world.finalExit = false;
+    world.escaped = false;
+    world.caught = false;
+    world.score = 1480;
+    world.parts.corn = 880;
+    world.parts.bonus = 100;
+    world.parts.stage = 500;
+    world.parts.escape = 0;
+    world.cornCount = 6;
+    // First 6 scattered kernels already collected (seeded scatter order).
+    let taken = 0;
+    for (const c of world.corn) {
+      if (c.golden) continue;
+      if (taken < 6) { c.taken = true; taken += 1; }
+    }
+    // Golden corn stays at its layout position (700, 400), untaken.
+    // Pumpkin pie stays at (150, 460), untaken.
+    const t = world.turkey;
+    t.hearts = 2;
+    t.hidden = true;
+    t.hideSpot = world.hides[1]; // the potato sack
+    t.x = 1120;
+    t.y = 590;
+    t.faceX = -1;
+    t.peekBig = true;
+    t.hopT = 0;
+    t.invulnT = 0;
+    const f = world.farmer;
+    f.state = 'SEARCH';
+    f.suspicion = 0.7;
+    f.bubble = '?';
+    f.bubbleT = 0.9;
+    f.x = 280;
+    f.y = 355;
+    f.facing = Math.PI; // facing left, at the pantry
+    f.searchTarget = { x: 155, y: 355, spot: world.hides[0] };
+    f.searchWaitT = 0.6; // mid-check
+    f.searchI = 0;
+    f.searchQueue = [world.hides[0], world.hides[1]]; // pantry first (wrong spot)
+    world.hideSeenSpot = 'unseen'; // he did NOT see Gus enter the sack
+    world.hazards.knives.length = 0;
+    world.hazards.knives.push({
+      kind: 'slide', x: 620, y: 480, vx: -380, vy: 0,
+      spin: 0, minD: 40, dead: false,
+    });
+    const o = world.hazards.oven;
+    o.phase = 'burst';
+    o.t = 0.4;
+    world.hint = 'HIDE! Press C in the hiding spot';
     world.events.length = 0;
     return { world, screen: 'playing', best: { score: 0, dist: 0 }, newBest: false };
   }

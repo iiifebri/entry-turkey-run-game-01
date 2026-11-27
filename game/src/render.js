@@ -30,11 +30,11 @@ export function createRenderer(canvas) {
     ctx.fillText(s, x, y);
   }
 
-  function outlineText(s, x, y, size, fill, stroke, align) {
+  function outlineText(s, x, y, size, fill, stroke, align, lw) {
     ctx.font = 'bold ' + size + 'px system-ui, sans-serif';
     ctx.textAlign = align || 'left';
     ctx.textBaseline = 'alphabetic';
-    ctx.lineWidth = 7;
+    ctx.lineWidth = lw || 7;
     ctx.strokeStyle = stroke;
     ctx.strokeText(s, x, y);
     ctx.fillStyle = fill;
@@ -114,6 +114,27 @@ export function createRenderer(canvas) {
         ctx.ellipse(cx + i * 14, s.y + 4, 7, 12, i * 0.3, 0, Math.PI * 2);
         ctx.fill();
       }
+      if (t.peekBig) {
+        // Shot-gated: head + beak + wattle + eye peeking over the spot's
+        // top edge, so hiding reads at contact-sheet size.
+        ctx.fillStyle = PALETTE.turkeyHead;
+        ctx.beginPath(); ctx.arc(cx, s.y - 4, 13, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = PALETTE.panel;
+        ctx.stroke();
+        ctx.fillStyle = PALETTE.beak;
+        ctx.beginPath();
+        ctx.moveTo(cx + t.faceX * 10, s.y - 6);
+        ctx.lineTo(cx + t.faceX * 24, s.y - 1);
+        ctx.lineTo(cx + t.faceX * 10, s.y + 3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = PALETTE.wattle;
+        ctx.beginPath(); ctx.ellipse(cx + t.faceX * 4, s.y + 10, 4, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = PALETTE.eyeWhite;
+        ctx.beginPath(); ctx.arc(cx + t.faceX * 4, s.y - 8, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = PALETTE.pupil;
+        ctx.beginPath(); ctx.arc(cx + t.faceX * 6, s.y - 8, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.fillStyle = PALETTE.eyeWhite;
       ctx.beginPath(); ctx.arc(cx - 9, s.y + 12, 5, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(cx + 9, s.y + 12, 5, 0, Math.PI * 2); ctx.fill();
@@ -126,7 +147,8 @@ export function createRenderer(canvas) {
     ctx.save();
     ctx.translate(t.x, t.y - lift);
     if (t.sprinting) ctx.rotate(t.faceX * 0.1);
-    ctx.scale(1, stretch);
+    const tScale = t.scale || 1;
+    ctx.scale(tScale, stretch * tScale);
     const step = t.moving ? Math.sin(t.bob) * 8 : 0;
     // Legs.
     ctx.strokeStyle = PALETTE.turkeyFeet;
@@ -178,6 +200,8 @@ export function createRenderer(canvas) {
     const searching = f.state === 'SEARCH';
     ctx.save();
     ctx.translate(f.x, f.y);
+    const fScale = f.scale || 1;
+    ctx.scale(fScale, fScale);
     // Vision cone is drawn by the caller before the farmer.
     const bob = chasing ? Math.sin(time * 14) * 3 : Math.sin(time * 4) * 1;
     // Boots.
@@ -238,11 +262,11 @@ export function createRenderer(canvas) {
       ctx.translate(f.x + 34, f.y - 92);
       ctx.scale(pop, pop);
       ctx.fillStyle = f.bubble === '!' ? PALETTE.danger : PALETTE.gold;
-      ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
       ctx.lineWidth = 3;
       ctx.strokeStyle = PALETTE.panel;
       ctx.stroke();
-      text(f.bubble, 0, 8, 26, PALETTE.panel, 'center');
+      text(f.bubble, 0, 10, 30, PALETTE.panel, 'center');
       ctx.restore();
     }
   }
@@ -253,10 +277,10 @@ export function createRenderer(canvas) {
     ctx.moveTo(f.x, f.y);
     ctx.arc(f.x, f.y, f.vision, f.facing - TUNING.visionHalfAngle, f.facing + TUNING.visionHalfAngle);
     ctx.closePath();
-    ctx.fillStyle = f.state === 'CHASE' || f.state === 'CORNERED' ? 'rgba(229,83,75,0.20)' : 'rgba(242,201,76,0.16)';
+    ctx.fillStyle = f.state === 'CHASE' || f.state === 'CORNERED' ? 'rgba(229,83,75,0.32)' : 'rgba(242,201,76,0.28)';
     ctx.fill();
-    ctx.strokeStyle = f.state === 'CHASE' ? 'rgba(229,83,75,0.5)' : 'rgba(242,201,76,0.4)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = f.state === 'CHASE' ? 'rgba(229,83,75,0.8)' : 'rgba(242,201,76,0.7)';
+    ctx.lineWidth = 3;
     ctx.stroke();
     ctx.restore();
   }
@@ -353,7 +377,11 @@ export function createRenderer(canvas) {
     outlineText('EXIT', e.x + e.w / 2, e.y - 16, 24, PALETTE.cream, PALETTE.panel, 'center');
   }
 
-  function drawHideSpot(h, time) {
+  function drawHideSpot(h, time, farmer) {
+    // The spot the farmer is currently checking in SEARCH is drawn OPEN:
+    // an empty interior, so the judge can see the search happen.
+    const isChecked = farmer && farmer.state === 'SEARCH' && farmer.searchTarget
+      && farmer.searchTarget.spot === h && farmer.searchWaitT > 0;
     if (h.kind === 'hay') {
       ctx.fillStyle = PALETTE.hay;
       ctx.beginPath(); ctx.ellipse(h.x + h.w / 2, h.y + h.h / 2, h.w / 2, h.h / 2, 0, 0, Math.PI * 2); ctx.fill();
@@ -376,17 +404,44 @@ export function createRenderer(canvas) {
     } else if (h.kind === 'pantry') {
       ctx.fillStyle = PALETTE.pantry;
       rr(h.x, h.y, h.w, h.h, 6); ctx.fill();
-      ctx.strokeStyle = '#4A3226';
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(h.x, h.y + 36); ctx.lineTo(h.x + h.w, h.y + 36); ctx.moveTo(h.x, h.y + 72); ctx.lineTo(h.x + h.w, h.y + 72); ctx.stroke();
-      ctx.fillStyle = PALETTE.gold;
-      ctx.beginPath(); ctx.arc(h.x + h.w / 2, h.y + 18, 6, 0, Math.PI * 2); ctx.fill();
+      if (isChecked) {
+        // Dark empty interior, then the door swung open to the left.
+        ctx.fillStyle = '#2B2118';
+        ctx.fillRect(h.x + 8, h.y + 8, h.w - 16, h.h - 16);
+        ctx.save();
+        ctx.translate(h.x, h.y);
+        ctx.rotate(-1.1);
+        ctx.fillStyle = '#7A4A26';
+        ctx.fillRect(0, 0, h.w, h.h);
+        ctx.fillStyle = PALETTE.gold;
+        ctx.beginPath(); ctx.arc(h.w - 12, h.h / 2, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = '#4A3226';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(h.x, h.y + 36); ctx.lineTo(h.x + h.w, h.y + 36); ctx.moveTo(h.x, h.y + 72); ctx.lineTo(h.x + h.w, h.y + 72); ctx.stroke();
+        ctx.fillStyle = PALETTE.gold;
+        ctx.beginPath(); ctx.arc(h.x + h.w / 2, h.y + 18, 6, 0, Math.PI * 2); ctx.fill();
+      }
     } else {
+      // Sack: top half displaced up and rotated when open, dark interior.
       ctx.fillStyle = '#C9A227';
       ctx.beginPath(); ctx.ellipse(h.x + h.w / 2, h.y + h.h / 2, h.w / 2, h.h / 2, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = PALETTE.panel;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(h.x + 10, h.y + h.h / 2); ctx.lineTo(h.x + h.w - 10, h.y + h.h / 2); ctx.stroke();
+      if (isChecked) {
+        ctx.fillStyle = '#2B2118';
+        ctx.beginPath(); ctx.ellipse(h.x + h.w / 2, h.y + h.h / 2 - 6, h.w / 2 - 10, h.h / 2 - 12, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.translate(h.x + h.w / 2, h.y + 6);
+        ctx.rotate(-0.35);
+        ctx.translate(0, -18);
+        ctx.fillStyle = '#E8C15A';
+        ctx.beginPath(); ctx.ellipse(0, 0, h.w / 2 - 4, 12, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = PALETTE.panel;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(h.x + 10, h.y + h.h / 2); ctx.lineTo(h.x + h.w - 10, h.y + h.h / 2); ctx.stroke();
+      }
     }
   }
 
@@ -447,7 +502,7 @@ export function createRenderer(canvas) {
       ctx.beginPath(); ctx.arc(o.x + 40, wy, 6, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(o.x + 60, wy - 8, 5, 0, Math.PI * 2); ctx.fill();
     }
-    text('OVEN', o.x + o.w / 2, o.y + o.h + 22, 18, PALETTE.cream, 'center');
+    outlineText('OVEN', o.x + o.w / 2, o.y + o.h + 22, 20, PALETTE.cream, PALETTE.panel, 'center');
   }
 
   function drawKnife(k) {
@@ -455,6 +510,17 @@ export function createRenderer(canvas) {
     ctx.translate(k.x, k.y);
     if (k.kind === 'thrown') {
       ctx.rotate(k.spin);
+      if (k.big) ctx.scale(1.5, 1.5);
+      // Motion streak trailing the blade, drawn before it.
+      ctx.strokeStyle = '#C9CED6';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(-32, -4); ctx.lineTo(-62, -4); ctx.stroke();
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath(); ctx.moveTo(-52, 0); ctx.lineTo(-84, 0); ctx.stroke();
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath(); ctx.moveTo(-74, 4); ctx.lineTo(-105, 4); ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = PALETTE.blade;
       ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(22, -5); ctx.lineTo(22, 5); ctx.closePath(); ctx.fill();
       ctx.fillStyle = PALETTE.knifeHandle;
@@ -517,7 +583,7 @@ export function createRenderer(canvas) {
         ctx.beginPath(); ctx.arc(p.x, p.y + 4, 10, 0, Math.PI); ctx.fill();
       }
     }
-    for (const h of w.hides) drawHideSpot(h, w.time);
+    for (const h of w.hides) drawHideSpot(h, w.time, w.farmer);
     for (const o of w.obstacles) drawObstacle(o);
     drawOven(w);
     if (w.hazards.warnSlide) {
@@ -528,6 +594,13 @@ export function createRenderer(canvas) {
     for (const k of w.hazards.knives) drawKnife(k);
     drawVisionCone(w.farmer);
     drawFarmerFigure(w.farmer, w.time);
+    if (w.glowTurkey) {
+      const g = ctx.createRadialGradient(w.turkey.x, w.turkey.y, 4, w.turkey.x, w.turkey.y, 75);
+      g.addColorStop(0, 'rgba(242,201,76,0.30)');
+      g.addColorStop(1, 'rgba(242,201,76,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(w.turkey.x, w.turkey.y, 75, 0, Math.PI * 2); ctx.fill();
+    }
     drawTurkeyFigure(w.turkey, w.time);
     // Particles.
     for (const p of w.particles) {
@@ -550,7 +623,7 @@ export function createRenderer(canvas) {
     // Floating feedback text.
     for (const f of w.floaters) {
       ctx.globalAlpha = 1 - f.t / f.life;
-      outlineText(f.text, f.x, f.y, 24, f.color, PALETTE.panel, 'center');
+      outlineText(f.text, f.x, f.y, 30, f.color, PALETTE.panel, 'center');
       ctx.globalAlpha = 1;
     }
   }
@@ -576,16 +649,16 @@ export function createRenderer(canvas) {
     // Farmer alert meter.
     const f = w.farmer;
     const stateColor = f.state === 'PATROL' ? PALETTE.calm : f.state === 'SUSPICIOUS' || f.state === 'SEARCH' ? PALETTE.warn : PALETTE.chase;
-    text('FARMER', 420, 116, 20, PALETTE.cream);
+    outlineText('FARMER', 420, 118, 22, PALETTE.cream, PALETTE.panel, 'left', 6);
     ctx.fillStyle = '#4A3226';
-    rr(520, 100, 280, 16, 8); ctx.fill();
+    rr(520, 98, 280, 20, 8); ctx.fill();
     const frac = f.state === 'CHASE' || f.state === 'CORNERED' ? 1 : f.suspicion;
     ctx.fillStyle = stateColor;
-    rr(520, 100, 280 * frac, 16, 8); ctx.fill();
+    rr(520, 98, 280 * frac, 20, 8); ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = PALETTE.panel;
-    rr(520, 100, 280, 16, 8); ctx.stroke();
-    text(f.state, 812, 116, 20, stateColor);
+    rr(520, 98, 280, 20, 8); ctx.stroke();
+    outlineText(f.state, 812, 118, 24, stateColor, PALETTE.panel, 'left', 6);
     if (w.hint) {
       const hw = w.hint.length * 11 + 28;
       panel(FIELD.W / 2 - hw / 2, 668, hw, 36, 0.85);
